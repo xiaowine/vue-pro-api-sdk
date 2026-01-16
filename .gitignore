@@ -6,5 +6,5 @@
 /node_modules/
 /.eslintcache
 debug.log
-/build/dist/*
 /vue-dist/*
+package-lock.json
