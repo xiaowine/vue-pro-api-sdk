@@ -16,8 +16,6 @@ import * as extensionConfig from '../extension.json';
 export function activate(status?: 'onStartupFinished', arg?: string): void {}
 
 export function about(): void {
-	eda.sys_Dialog.showInformationMessage(
-		eda.sys_I18n.text('EasyEDA extension SDK v', undefined, undefined, extensionConfig.version),
-		eda.sys_I18n.text('About'),
-	);
+	console.log('This is a Pro API SDK example extension.', extensionConfig.entry);
+	eda.sys_IFrame.openIFrame('/vue-dist/index.html', 500, 500);
 }

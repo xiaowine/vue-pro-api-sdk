@@ -10,8 +10,14 @@
 		"prepare": "husky",
 		"prettier:all": "prettier --write .",
 		"eslint:all": "eslint --ext .ts --fix .",
-		"fix": "npm run prettier:all && npm run eslint:all",
-		"build": "npm run compile && ts-node ./build/packaged.ts"
+		"fix": "pnpm run prettier:all && pnpm run eslint:all",
+		"build": "pnpm run vite-build && pnpm run compile && ts-node ./build/packaged.ts",
+		"vite-build": "vue-tsc -b --noEmit && vite build",
+		"dev": "vite"
+	},
+	"dependencies": {
+		"vue": "^3.5.24",
+		"vue-router": "^4.6.3"
 	},
 	"devDependencies": {
 		"@jlceda/pro-api-types": "^0.1.175",
@@ -32,7 +38,13 @@
 		"prettier": "^3.4.2",
 		"rimraf": "^6.0.1",
 		"ts-node": "^10.9.2",
-		"typescript": "^5.7.3"
+		"@types/node": "^24.10.1",
+		"@vitejs/plugin-vue": "^6.0.1",
+		"@vue/tsconfig": "^0.8.1",
+		"typescript": "~5.9.3",
+		"vite": "^7.2.4",
+		"vue-tsc": "^3.1.4",
+		"sass-embedded": "^1.93.3"
 	},
 	"lint-staged": {
 		"*.ts": "eslint --cache --fix",

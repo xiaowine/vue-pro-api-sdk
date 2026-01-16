@@ -5,7 +5,6 @@
 		"lib": ["ESNext", "DOM"],
 		"experimentalDecorators": true,
 		"module": "CommonJS",
-		"moduleResolution": "Node10",
 		"resolveJsonModule": true,
 		"allowJs": true,
 		"sourceMap": false,
@@ -22,7 +21,9 @@
 		"noImplicitThis": true,
 		"useUnknownInCatchVariables": true,
 		"alwaysStrict": true,
-		"isolatedModules": true
+		"isolatedModules": true,
+		"types": ["node", "vite/client"],
+		"skipLibCheck": true
 	},
-	"include": ["./src/", "./node_modules/@jlceda/pro-api-types/"]
+	"include": ["./src/", "./vue/**/*.vue", "./node_modules/@jlceda/pro-api-types/", "vue/App.vue"]
 }
