@@ -10,12 +10,12 @@
  * 如需了解更多开发细节，请阅读：
  * https://prodocs.lceda.cn/cn/api/guide/
  */
-import * as extensionConfig from '../extension.json';
+// import * as extensionConfig from '../extension.json';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function activate(status?: 'onStartupFinished', arg?: string): void {}
 
 export function about(): void {
-	console.log('This is a Pro API SDK example extension.', extensionConfig.entry);
+	eda.sys_Storage.setExtensionUserConfig('page', 'Second');
 	eda.sys_IFrame.openIFrame('/vue-dist/index.html', 500, 500);
 }

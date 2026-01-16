@@ -1,10 +1,10 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createMemoryHistory, createRouter } from 'vue-router';
 
 import First from './pages/First.vue';
 import Second from './pages/Second.vue';
 
 const router = createRouter({
-	history: createWebHistory(import.meta.env.BASE_URL),
+	history: createMemoryHistory('/vue-dist'),
 	routes: [
 		{
 			path: '/:pathMatch(.*)*',
@@ -12,12 +12,12 @@ const router = createRouter({
 			redirect: { name: 'First' },
 		},
 		{
-			path: '/First',
+			path: '/',
 			name: 'First',
 			component: First,
 		},
 		{
-			path: '/',
+			path: '/Second',
 			name: 'Second',
 			component: Second,
 		},

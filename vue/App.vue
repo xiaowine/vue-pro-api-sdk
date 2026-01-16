@@ -1,4 +1,14 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { onMounted } from 'vue';
+import router from './router';
+
+onMounted(() => {
+  var page = eda.sys_Storage.getExtensionUserConfig('page');
+  if (typeof page === 'string' && page.length > 0) {
+    router.push({ name: page });
+  }
+});
+</script>
 
 <template>
   <router-view />
