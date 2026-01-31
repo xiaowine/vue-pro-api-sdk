@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import router from './router';
+import { isEDA } from './utils/utils';
 
 onMounted(() => {
-  var page = eda.sys_Storage.getExtensionUserConfig('page');
-  if (typeof page === 'string' && page.length > 0) {
-    router.push({ name: page });
+  if (isEDA) {
+    var page = eda.sys_Storage.getExtensionAllUserConfigs()[extensionConfig.name];
+    if (typeof page === 'string' && page.length > 0) {
+      router.push({ name: page });
+    }
   }
+  console.log('is EDA environment:', isEDA);
 });
 </script>
 
