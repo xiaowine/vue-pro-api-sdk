@@ -25,5 +25,5 @@
 		"types": ["node", "vite/client"],
 		"skipLibCheck": true
 	},
-	"include": ["./src/", "./vue/**/*.vue", "./node_modules/@jlceda/pro-api-types/", "vue/App.vue"]
+	"include": ["./src/", "./vue/**/*", "./node_modules/@jlceda/pro-api-types/"]
 }
