@@ -2,6 +2,7 @@
 import { onMounted } from 'vue';
 import router from './router';
 import { isEDA } from './utils/utils';
+import * as extensionConfig from '../extension.json';
 
 onMounted(() => {
   if (isEDA) {
