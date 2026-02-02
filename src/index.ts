@@ -16,7 +16,10 @@ import * as extensionConfig from '../extension.json';
 export function activate(status?: 'onStartupFinished', arg?: string): void {}
 
 const openPage = async (name: string, width: number, height: number) => {
-	const config = await eda.sys_Storage.setExtensionAllUserConfigs({ [extensionConfig.name]: name });
+	const config = await eda.sys_Storage.setExtensionAllUserConfigs({
+		...eda.sys_Storage.getExtensionAllUserConfigs(),
+		[extensionConfig.name]: name,
+	});
 	if (config) {
 		eda.sys_IFrame.openIFrame('/vue-dist/index.html', width, height, name);
 	}
