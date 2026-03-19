@@ -13,7 +13,7 @@
 		"build": "pnpm run vite-build && pnpm run compile && ts-node ./build/packaged.ts",
 		"vite-build": "vue-tsc -b --noEmit && vite build",
 		"dev": "vite",
-		"check-login:edge": "node ./build/check-lceda-login-edge.js"
+		"check-install": "node ./build/check-lceda-auto-install.js"
 	},
 	"dependencies": {
 		"vue": "^3.5.24",

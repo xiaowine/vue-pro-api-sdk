@@ -8,3 +8,4 @@
 debug.log
 /vue-dist/*
 package-lock.json
+*-profile

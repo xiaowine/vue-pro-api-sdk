@@ -1,29 +1,117 @@
-﻿const fs = require("node:fs");
+﻿/**
+ * LcEDA Pro extension auto installer (watch mode).
+ *
+ * CLI arguments:
+ * - --browser <msedge|chrome|chromium>
+ *   Browser family to use. Default: msedge
+ *
+ * - --browser-path <path>
+ *   Optional executable path for browser. If omitted, script uses common install paths.
+ *   Example: --browser-path "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+ *
+ * - --user-data-dir <path>
+ *   Browser user profile directory used for CDP session reuse.
+ *   Can be relative or absolute. Default: ./build/.browser-<browser>-cdp-profile
+ *
+ * - --dist-dir <path>
+ *   Directory to watch for .eext packages.
+ *   Can be relative or absolute. Default: ./build/dist
+ *
+ * - --cdp-port <number>
+ *   Remote debugging port for CDP. Default: 9222
+ *
+ * - --watch-interval <ms>
+ *   Polling interval for artifact change detection. Default: 1200
+ *
+ * - --install-on-watch-start <0|1>
+ *   Whether to install immediately on startup if artifact exists. Default: 1
+ *
+ * Usage examples:
+ * - pnpm run check-install
+ * - pnpm run check-install -- --browser chrome
+ * - pnpm run check-install -- --browser chromium --dist-dir ./custom-dist
+ * - pnpm run check-install -- --browser msedge --user-data-dir ./build/.edge-cdp-profile --cdp-port 9333
+ */
+const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+
+function parseCliArgs(argv) {
+	const parsed = {};
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (!arg.startsWith("--")) {
+			continue;
+		}
+
+		const body = arg.slice(2);
+		const eqIndex = body.indexOf("=");
+		let key = body;
+		let value = "1";
+
+		if (eqIndex >= 0) {
+			key = body.slice(0, eqIndex);
+			value = body.slice(eqIndex + 1);
+		} else if (i + 1 < argv.length && !argv[i + 1].startsWith("--")) {
+			value = argv[i + 1];
+			i += 1;
+		}
+
+		const camelKey = key.replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+		parsed[camelKey] = value;
+	}
+
+	return parsed;
+}
+
+function resolveInputPath(inputPath, fallbackPath) {
+	const finalPath = inputPath || fallbackPath;
+	return path.isAbsolute(finalPath) ? finalPath : path.resolve(process.cwd(), finalPath);
+}
+
+function normalizeBrowserName(value) {
+	const raw = String(value || "msedge").toLowerCase();
+	if (raw === "edge" || raw === "msedge") {
+		return "msedge";
+	}
+	if (raw === "chrome" || raw === "google-chrome") {
+		return "chrome";
+	}
+	if (raw === "chromium") {
+		return "chromium";
+	}
+	throw new Error(`Unsupported browser: ${value}. Use one of: msedge, chrome, chromium.`);
+}
+
+const CLI = parseCliArgs(process.argv.slice(2));
 
 // Target editor page.
 const TARGET_URL = "https://pro.lceda.cn/editor";
 const TARGET_ORIGIN = new URL(TARGET_URL).origin;
 
-// CDP connection config: try to reuse existing Edge first.
-const EDGE_CDP_PORT = Number(process.env.EDGE_CDP_PORT || 9222);
-const EDGE_CDP_URL = `http://127.0.0.1:${EDGE_CDP_PORT}`;
-const EDGE_USER_DATA_DIR = path.resolve(__dirname, ".edge-cdp-profile");
+// Browser/CDP config.
+const BROWSER_NAME = normalizeBrowserName(CLI.browser || process.env.BROWSER || "msedge");
+const BROWSER_CDP_PORT = Number(CLI.cdpPort || process.env.CDP_PORT || process.env.EDGE_CDP_PORT || 9222);
+const BROWSER_CDP_URL = `http://127.0.0.1:${BROWSER_CDP_PORT}`;
+const BROWSER_EXECUTABLE_PATH = CLI.browserPath || process.env.BROWSER_PATH || process.env.EDGE_PATH || "";
+const BROWSER_USER_DATA_DIR = resolveInputPath(
+	CLI.userDataDir || process.env.BROWSER_USER_DATA_DIR || process.env.EDGE_USER_DATA_DIR || `.browser-${BROWSER_NAME}-cdp-profile`,
+	path.resolve(__dirname, `.browser-${BROWSER_NAME}-cdp-profile`)
+);
 
 // Build artifact config.
-const DIST_DIR = path.resolve(__dirname, "dist");
+const DIST_DIR = resolveInputPath(CLI.distDir || process.env.DIST_DIR || path.resolve(__dirname, "dist"), path.resolve(__dirname, "dist"));
 const EXTENSION_CONFIG_PATH = path.resolve(__dirname, "..", "extension.json");
 
 // Continuous listener config.
-const WATCH_INTERVAL_MS = Number(process.env.WATCH_INTERVAL_MS || 1200);
-const INSTALL_ON_WATCH_START = process.env.INSTALL_ON_WATCH_START !== "0";
+const WATCH_INTERVAL_MS = Number(CLI.watchInterval || process.env.WATCH_INTERVAL_MS || 1200);
+const INSTALL_ON_WATCH_START = (CLI.installOnWatchStart || process.env.INSTALL_ON_WATCH_START || "1") !== "0";
 
-// Default window geometry for spawned Edge (non-fullscreen).
-const EDGE_WINDOW_WIDTH = Number(process.env.EDGE_WINDOW_WIDTH || 1366);
-const EDGE_WINDOW_HEIGHT = Number(process.env.EDGE_WINDOW_HEIGHT || 860);
-const EDGE_WINDOW_X = Number(process.env.EDGE_WINDOW_X || 120);
-const EDGE_WINDOW_Y = Number(process.env.EDGE_WINDOW_Y || 80);
+// Default window geometry for spawned browser (non-fullscreen).
+const BROWSER_WINDOW_WIDTH = Number(CLI.windowWidth || process.env.BROWSER_WINDOW_WIDTH || process.env.EDGE_WINDOW_WIDTH || 1366);
+const BROWSER_WINDOW_HEIGHT = Number(CLI.windowHeight || process.env.BROWSER_WINDOW_HEIGHT || process.env.EDGE_WINDOW_HEIGHT || 860);
+const BROWSER_WINDOW_X = Number(CLI.windowX || process.env.BROWSER_WINDOW_X || process.env.EDGE_WINDOW_X || 120);
+const BROWSER_WINDOW_Y = Number(CLI.windowY || process.env.BROWSER_WINDOW_Y || process.env.EDGE_WINDOW_Y || 80);
 
 // Prefer stable selectors (data-test / prefix match) over hashed class names.
 const SELECTORS = {
@@ -85,7 +173,7 @@ function getExpectedPackagePathFromConfig() {
 
 function getCurrentPackageInfo() {
 	// Keep naming rule consistent with build/packaged.ts:
-	// build/dist/${extensionConfig.name}_v${extensionConfig.version}.eext
+	// dist/${extensionConfig.name}_v${extensionConfig.version}.eext
 	try {
 		const expectedPath = getExpectedPackagePathFromConfig();
 		if (fs.existsSync(expectedPath)) {
@@ -116,7 +204,7 @@ async function connectCdpWithRetry(chromium, retries = 6, delayMs = 1000) {
 	let lastError;
 	for (let i = 0; i < retries; i++) {
 		try {
-			return await chromium.connectOverCDP(EDGE_CDP_URL);
+			return await chromium.connectOverCDP(BROWSER_CDP_URL);
 		} catch (error) {
 			lastError = error;
 			if (i < retries - 1) {
@@ -127,30 +215,68 @@ async function connectCdpWithRetry(chromium, retries = 6, delayMs = 1000) {
 	throw lastError;
 }
 
-// Resolve Edge executable from EDGE_PATH or common install paths.
-function resolveEdgeExecutable() {
-	const envEdgePath = process.env.EDGE_PATH;
-	if (envEdgePath && fs.existsSync(envEdgePath)) {
-		return envEdgePath;
+function getExecutableCandidates(browserName) {
+	if (browserName === "msedge") {
+		return [
+			path.join(process.env["ProgramFiles(x86)"] || "", "Microsoft", "Edge", "Application", "msedge.exe"),
+			path.join(process.env.ProgramFiles || "", "Microsoft", "Edge", "Application", "msedge.exe"),
+			"msedge"
+		];
 	}
 
-	const candidates = [
-		path.join(process.env["ProgramFiles(x86)"] || "", "Microsoft", "Edge", "Application", "msedge.exe"),
-		path.join(process.env.ProgramFiles || "", "Microsoft", "Edge", "Application", "msedge.exe"),
+	if (browserName === "chrome") {
+		return [
+			path.join(process.env["ProgramFiles(x86)"] || "", "Google", "Chrome", "Application", "chrome.exe"),
+			path.join(process.env.ProgramFiles || "", "Google", "Chrome", "Application", "chrome.exe"),
+			"chrome"
+		];
+	}
+
+	return [
+		path.join(process.env.LOCALAPPDATA || "", "Chromium", "Application", "chrome.exe"),
+		"chromium",
+		"chrome",
 		"msedge"
 	];
-
-	return candidates.find((item) => item && (item === "msedge" || fs.existsSync(item))) || "msedge";
 }
 
-// Start a standalone Edge with CDP enabled.
-function startEdgeWithCDP() {
-	const edgeExecutable = resolveEdgeExecutable();
+// Resolve browser executable from CLI/env or common install paths.
+function resolveBrowserExecutable() {
+	if (BROWSER_EXECUTABLE_PATH) {
+		if (
+			(BROWSER_EXECUTABLE_PATH.includes("\\") || BROWSER_EXECUTABLE_PATH.includes("/") || BROWSER_EXECUTABLE_PATH.toLowerCase().endsWith(".exe"))
+			&& !fs.existsSync(BROWSER_EXECUTABLE_PATH)
+		) {
+			throw new Error(`Browser executable not found: ${BROWSER_EXECUTABLE_PATH}`);
+		}
+		return BROWSER_EXECUTABLE_PATH;
+	}
+
+	const candidates = getExecutableCandidates(BROWSER_NAME);
+	for (const candidate of candidates) {
+		if (!candidate) {
+			continue;
+		}
+		if (candidate.includes("\\") || candidate.includes("/") || candidate.toLowerCase().endsWith(".exe")) {
+			if (fs.existsSync(candidate)) {
+				return candidate;
+			}
+		} else {
+			return candidate;
+		}
+	}
+
+	throw new Error(`Unable to resolve executable for browser: ${BROWSER_NAME}`);
+}
+
+// Start standalone browser with CDP enabled.
+function startBrowserWithCDP() {
+	const browserExecutable = resolveBrowserExecutable();
 	const args = [
-		`--remote-debugging-port=${EDGE_CDP_PORT}`,
-		`--user-data-dir=${EDGE_USER_DATA_DIR}`,
-		`--window-size=${EDGE_WINDOW_WIDTH},${EDGE_WINDOW_HEIGHT}`,
-		`--window-position=${EDGE_WINDOW_X},${EDGE_WINDOW_Y}`,
+		`--remote-debugging-port=${BROWSER_CDP_PORT}`,
+		`--user-data-dir=${BROWSER_USER_DATA_DIR}`,
+		`--window-size=${BROWSER_WINDOW_WIDTH},${BROWSER_WINDOW_HEIGHT}`,
+		`--window-position=${BROWSER_WINDOW_X},${BROWSER_WINDOW_Y}`,
 		"--new-window",
 		"--disable-extensions",
 		"--disable-component-extensions-with-background-pages",
@@ -159,7 +285,7 @@ function startEdgeWithCDP() {
 		"--no-default-browser-check"
 	];
 
-	const child = spawn(edgeExecutable, args, { detached: true, stdio: "ignore" });
+	const child = spawn(browserExecutable, args, { detached: true, stdio: "ignore" });
 	child.unref();
 }
 
@@ -169,14 +295,14 @@ async function createCdpSession(chromium) {
 	let browser = await connectCdpWithRetry(chromium, 2, 400).catch(() => null);
 
 	if (!browser) {
-		startEdgeWithCDP();
+		startBrowserWithCDP();
 		browser = await connectCdpWithRetry(chromium, 12, 1000);
 		mode = "spawn";
 	}
 
 	const context = browser.contexts()[0];
 	if (!context) {
-		throw new Error("No browser context available in Edge CDP session");
+		throw new Error("No browser context available in CDP session");
 	}
 
 	return { browser, context, mode };
@@ -196,7 +322,7 @@ function pickReusablePage(context) {
 
 	const neutralPage = pages.find((p) => {
 		const url = p.url() || "";
-		return url === "about:blank" || url.startsWith("edge://newtab");
+		return url === "about:blank" || url.startsWith("edge://newtab") || url.startsWith("chrome://newtab");
 	});
 	if (neutralPage) {
 		return neutralPage;
@@ -365,10 +491,10 @@ async function installPackageWithLogin(artifactInfo) {
 		browser = session.browser;
 
 		if (session.mode === "reuse") {
-			console.log("Mode: Reuse existing Edge CDP session (no extra window)");
+			console.log(`Mode: Reuse existing ${BROWSER_NAME} CDP session (no extra window)`);
 		} else {
-			console.log("Mode: Spawn new Edge with CDP (extensions disabled, browser will stay open)");
-			console.log(`Window: ${EDGE_WINDOW_WIDTH}x${EDGE_WINDOW_HEIGHT} at (${EDGE_WINDOW_X}, ${EDGE_WINDOW_Y})`);
+			console.log(`Mode: Spawn new ${BROWSER_NAME} with CDP (extensions disabled, browser will stay open)`);
+			console.log(`Window: ${BROWSER_WINDOW_WIDTH}x${BROWSER_WINDOW_HEIGHT} at (${BROWSER_WINDOW_X}, ${BROWSER_WINDOW_Y})`);
 		}
 
 		const page = pickReusablePage(session.context) || (await session.context.newPage());
@@ -379,7 +505,7 @@ async function installPackageWithLogin(artifactInfo) {
 		printResult(result);
 
 		if (!result.isLoggedIn) {
-			await waitForEnter("Not logged in yet. Login in Edge, then press Enter to re-check...");
+			await waitForEnter("Not logged in yet. Login in browser, then press Enter to re-check...");
 			result = await evaluateLoginState(page);
 			console.log("Re-check result:");
 			printResult(result);
@@ -392,7 +518,7 @@ async function installPackageWithLogin(artifactInfo) {
 		}
 	} finally {
 		process.stdin.pause();
-		// Disconnect CDP only; keep Edge window open.
+		// Disconnect CDP only; keep browser window open.
 		if (browser) {
 			await browser.close().catch(() => {});
 		}
@@ -401,6 +527,9 @@ async function installPackageWithLogin(artifactInfo) {
 
 async function runWatchMode() {
 	console.log(`Auto-install listener enabled. Interval: ${WATCH_INTERVAL_MS}ms`);
+	console.log(`Browser: ${BROWSER_NAME}`);
+	console.log(`CDP endpoint: ${BROWSER_CDP_URL}`);
+	console.log(`User data dir: ${BROWSER_USER_DATA_DIR}`);
 	console.log(`Watching dist directory: ${DIST_DIR}`);
 	console.log(`Queue policy: keep only one pending install and always overwrite with latest build.`);
 
@@ -457,7 +586,7 @@ async function runWatchMode() {
 			const initialArtifact = getCurrentPackageInfo();
 			lastSeenKey = initialArtifact.key;
 			await triggerInstall(initialArtifact, "startup");
-		} catch (error) {
+		} catch {
 			console.warn("Startup install skipped: no artifact found yet.");
 		}
 	}
@@ -497,3 +626,4 @@ main().catch((error) => {
 	console.error(error);
 	process.exitCode = 1;
 });
+
