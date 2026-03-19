@@ -18,3 +18,6 @@
 debug.log
 /iframe
 /vue
+/.browser-msedge-cdp-profile
+/.browser-chrome-cdp-profile
+/.browser-chromium-cdp-profile
